@@ -25,19 +25,38 @@ void AddNeighborIfValid(int neighbor_label, std::vector<int> &neighbor_labels) {
 }
 
 void CollectNeighborsLabels(int i, int j, const std::vector<std::vector<int>> &temp_labels,
-                            std::vector<int> &neighbor_labels, int /*rows*/, int cols) {
+                            std::vector<int> &neighbor_labels, int rows, int cols) {
+  // Check top-left (diagonal)
   if (i > 0 && j > 0) {
     AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j - 1)], neighbor_labels);
   }
+  // Check top
   if (i > 0) {
     AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j)], neighbor_labels);
   }
+  // Check top-right (diagonal)
   if (i > 0 && j + 1 < cols) {
-    int neighbor = temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j + 1)];
-    AddNeighborIfValid(neighbor, neighbor_labels);
+    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j + 1)], neighbor_labels);
   }
+  // Check left
   if (j > 0) {
     AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j - 1)], neighbor_labels);
+  }
+  // Check right - IMPORTANT: For 8-connectivity, we need to check right neighbor too!
+  if (j + 1 < cols) {
+    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j + 1)], neighbor_labels);
+  }
+  // Check bottom-left (diagonal) - IMPORTANT: For 8-connectivity, we need to check below rows!
+  if (i + 1 < rows && j > 0) {
+    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j - 1)], neighbor_labels);
+  }
+  // Check bottom (diagonal)
+  if (i + 1 < rows) {
+    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j)], neighbor_labels);
+  }
+  // Check bottom-right (diagonal)
+  if (i + 1 < rows && j + 1 < cols) {
+    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j + 1)], neighbor_labels);
   }
 }
 
@@ -47,23 +66,28 @@ int FindMinLabel(const std::vector<int> &labels) {
   }
   int min_label = labels[0];
   for (std::size_t k = 1; k < labels.size(); ++k) {
-    min_label = std::min(min_label, labels[k]);
+    if (labels[k] < min_label) {
+      min_label = labels[k];
+    }
   }
   return min_label;
 }
 
-void ProcessPixel(int i, int j, const InType &input, int cols, std::vector<std::vector<int>> &temp_labels,
+void ProcessPixel(int i, int j, const InType &input, int rows, int cols, std::vector<std::vector<int>> &temp_labels,
                   std::vector<int> &parent, std::atomic<int> &next_label) {
   std::size_t idx = (static_cast<std::size_t>(i) * static_cast<std::size_t>(cols)) + static_cast<std::size_t>(j) + 2;
 
+  // Check if this is a background pixel (value 0 means object, non-zero means background)
+  // Based on your test data: 0 = object, 255 = background
   if (input[idx] != 0) {
+    temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = 0;
     return;
   }
 
   std::vector<int> neighbor_labels;
-  neighbor_labels.reserve(4);
+  neighbor_labels.reserve(8);
 
-  CollectNeighborsLabels(i, j, temp_labels, neighbor_labels, 0, cols);
+  CollectNeighborsLabels(i, j, temp_labels, neighbor_labels, rows, cols);
 
   if (neighbor_labels.empty()) {
     int label = next_label.fetch_add(1);
@@ -108,22 +132,9 @@ void SortAndRemoveDuplicates(std::vector<int> &unique_labels) {
     return;
   }
 
-  for (std::size_t i = 0; i < unique_labels.size(); ++i) {
-    for (std::size_t j = i + 1; j < unique_labels.size(); ++j) {
-      if (unique_labels[i] > unique_labels[j]) {
-        std::swap(unique_labels[i], unique_labels[j]);
-      }
-    }
-  }
-
-  std::vector<int> temp;
-  temp.reserve(unique_labels.size());
-  for (std::size_t i = 0; i < unique_labels.size(); ++i) {
-    if (i == 0 || unique_labels[i] != unique_labels[i - 1]) {
-      temp.push_back(unique_labels[i]);
-    }
-  }
-  unique_labels.swap(temp);
+  std::sort(unique_labels.begin(), unique_labels.end());
+  auto last = std::unique(unique_labels.begin(), unique_labels.end());
+  unique_labels.erase(last, unique_labels.end());
 }
 
 void ApplyLabelMapping(const std::map<int, int> &label_mapping, const std::vector<std::vector<int>> &temp_labels,
@@ -133,7 +144,11 @@ void ApplyLabelMapping(const std::map<int, int> &label_mapping, const std::vecto
       int label = temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)];
       if (label != 0) {
         auto it = label_mapping.find(label);
-        labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = it->second;
+        if (it != label_mapping.end()) {
+          labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = it->second;
+        } else {
+          labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = 0;
+        }
       } else {
         labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = 0;
       }
@@ -209,7 +224,7 @@ void MarkingComponentsTBB::UnionLabels(std::vector<int> &parent, int label1, int
 void MarkingComponentsTBB::ProcessFirstPass() {
   tbb::parallel_for(0, rows_, [&](int i) {
     for (int j = 0; j < cols_; ++j) {
-      ProcessPixel(i, j, input_, cols_, temp_labels_, parent_, next_label_);
+      ProcessPixel(i, j, input_, rows_, cols_, temp_labels_, parent_, next_label_);
     }
   });
 }
