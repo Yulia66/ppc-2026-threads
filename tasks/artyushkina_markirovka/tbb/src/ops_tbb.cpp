@@ -1,17 +1,17 @@
 #include "artyushkina_markirovka/tbb/include/ops_tbb.hpp"
 
 #include <tbb/blocked_range.h>
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
-#include <tbb/parallel_for_each.h>
-#include <tbb/concurrent_vector.h>
 #include <tbb/concurrent_unordered_set.h>
+#include <tbb/concurrent_vector.h>
+#include <tbb/parallel_for.h>
+#include <tbb/parallel_for_each.h>
+#include <tbb/parallel_reduce.h>
 
+#include <atomic>
 #include <cstddef>
 #include <map>
-#include <vector>
-#include <atomic>
 #include <mutex>
+#include <vector>
 
 #include "artyushkina_markirovka/common/include/common.hpp"
 
@@ -73,14 +73,13 @@ struct CellData {
 
 class LabelProcessor {
  public:
-  LabelProcessor(bool is_test5, int cols, const InType& input)
-      : is_test5_(is_test5), cols_(cols), input_(input) {}
+  LabelProcessor(bool is_test5, int cols, const InType &input) : is_test5_(is_test5), cols_(cols), input_(input) {}
 
-  CellData ProcessCell(int i, int j, const std::vector<std::vector<int>>& temp_labels) {
+  CellData ProcessCell(int i, int j, const std::vector<std::vector<int>> &temp_labels) {
     CellData result;
     result.i = i;
     result.j = j;
-    
+
     std::size_t idx = (static_cast<std::size_t>(i) * static_cast<std::size_t>(cols_)) + static_cast<std::size_t>(j) + 2;
 
     if (input_[idx] != 0) {
@@ -99,14 +98,14 @@ class LabelProcessor {
     } else {
       result.min_label = FindMinLabel(result.neighbor_labels);
     }
-    
+
     return result;
   }
 
  private:
   bool is_test5_;
   int cols_;
-  const InType& input_;
+  const InType &input_;
 };
 
 }  // namespace
@@ -184,43 +183,44 @@ bool MarkingComponentsTBB::RunImpl() {
 
   std::vector<std::vector<int>> temp_labels(static_cast<std::size_t>(rows_),
                                             std::vector<int>(static_cast<std::size_t>(cols_), 0));
-  
+
   std::vector<int> parent;
   parent.push_back(0);
-  
+
   std::atomic<int> next_label(1);
   std::mutex parent_mutex;
 
   // First pass: Labeling with parallel for
   LabelProcessor processor(is_test5, cols_, input_);
-  
+
   for (int i = 0; i < rows_; ++i) {
-    tbb::parallel_for(tbb::blocked_range<int>(0, cols_), [&](const tbb::blocked_range<int>& r) {
+    tbb::parallel_for(tbb::blocked_range<int>(0, cols_), [&](const tbb::blocked_range<int> &r) {
       for (int j = r.begin(); j < r.end(); ++j) {
-        std::size_t idx = (static_cast<std::size_t>(i) * static_cast<std::size_t>(cols_)) + static_cast<std::size_t>(j) + 2;
-        
+        std::size_t idx =
+            (static_cast<std::size_t>(i) * static_cast<std::size_t>(cols_)) + static_cast<std::size_t>(j) + 2;
+
         if (input_[idx] != 0) {
           continue;
         }
-        
+
         std::vector<int> neighbor_labels;
-        
+
         if (is_test5) {
           CollectNeighborsTest5Impl(i, j, temp_labels, neighbor_labels, cols_);
         } else {
           CollectNeighbors8ConnectivityImpl(i, j, temp_labels, neighbor_labels, cols_);
         }
-        
+
         if (neighbor_labels.empty()) {
           int new_label = next_label.fetch_add(1);
           temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = new_label;
-          
+
           std::lock_guard<std::mutex> lock(parent_mutex);
           parent.push_back(new_label);
         } else {
           int min_label = FindMinLabel(neighbor_labels);
           temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = min_label;
-          
+
           for (int label : neighbor_labels) {
             if (label != min_label) {
               std::lock_guard<std::mutex> lock(parent_mutex);
@@ -233,12 +233,12 @@ bool MarkingComponentsTBB::RunImpl() {
   }
 
   // Second pass: Resolve equivalences with parallel for
-  tbb::parallel_for(tbb::blocked_range<int>(0, rows_), [&](const tbb::blocked_range<int>& r) {
+  tbb::parallel_for(tbb::blocked_range<int>(0, rows_), [&](const tbb::blocked_range<int> &r) {
     for (int i = r.begin(); i < r.end(); ++i) {
       for (int j = 0; j < cols_; ++j) {
         if (temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] != 0) {
-          temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] =
-              MarkingComponentsTBB::FindRoot(parent, temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)]);
+          temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = MarkingComponentsTBB::FindRoot(
+              parent, temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)]);
         }
       }
     }
@@ -248,17 +248,17 @@ bool MarkingComponentsTBB::RunImpl() {
   std::map<int, int> label_mapping;
   std::atomic<int> current_label(1);
   std::mutex mapping_mutex;
-  
-  tbb::parallel_for(tbb::blocked_range<int>(0, rows_), [&](const tbb::blocked_range<int>& r) {
+
+  tbb::parallel_for(tbb::blocked_range<int>(0, rows_), [&](const tbb::blocked_range<int> &r) {
     for (int i = r.begin(); i < r.end(); ++i) {
       for (int j = 0; j < cols_; ++j) {
         if (temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] != 0) {
           int root = temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)];
-          
+
           // Check if root already has a mapping
           bool found = false;
           int mapped_label = 0;
-          
+
           {
             std::lock_guard<std::mutex> lock(mapping_mutex);
             auto it = label_mapping.find(root);
@@ -267,13 +267,13 @@ bool MarkingComponentsTBB::RunImpl() {
               mapped_label = it->second;
             }
           }
-          
+
           if (!found) {
             mapped_label = current_label.fetch_add(1);
             std::lock_guard<std::mutex> lock(mapping_mutex);
             label_mapping[root] = mapped_label;
           }
-          
+
           labels_[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = mapped_label;
         } else {
           labels_[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = 0;
