@@ -55,9 +55,7 @@ int FindMinLabel(const std::vector<int> &labels) {
   }
   int min_label = labels[0];
   for (size_t k = 1; k < labels.size(); ++k) {
-    if (labels[k] < min_label) {
-      min_label = labels[k];
-    }
+    min_label = std::min(min_label, labels[k]);
   }
   return min_label;
 }
@@ -73,7 +71,7 @@ void ProcessPixel(int i, int j, const InType &input, int cols, std::vector<std::
   }
 
   std::vector<int> neighbor_labels;
-  neighbor_labels.reserve(4);  // максимум 4 соседа (слева и сверху с диагоналями)
+  neighbor_labels.reserve(4);
 
   CollectNeighborsLabels(i, j, temp_labels, neighbor_labels, cols);
 
@@ -120,9 +118,9 @@ void SortAndRemoveDuplicates(std::vector<int> &unique_labels) {
     return;
   }
 
-  std::sort(unique_labels.begin(), unique_labels.end());
-  auto last = std::unique(unique_labels.begin(), unique_labels.end());
-  unique_labels.erase(last, unique_labels.end());
+  std::ranges::sort(unique_labels);
+  auto last = std::ranges::unique(unique_labels);
+  unique_labels.erase(last.begin(), last.end());
 }
 
 void ApplyLabelMapping(const std::map<int, int> &label_mapping, const std::vector<std::vector<int>> &temp_labels,
