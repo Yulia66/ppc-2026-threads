@@ -61,8 +61,7 @@ int FindMinLabel(const std::vector<int> &labels) {
   return min_label;
 }
 
-void ProcessPixel(int i, int j, const InType &input, int cols,
-                  std::vector<std::vector<int>> &temp_labels,
+void ProcessPixel(int i, int j, const InType &input, int cols, std::vector<std::vector<int>> &temp_labels,
                   std::vector<int> &parent, std::atomic<int> &next_label) {
   size_t idx = (static_cast<size_t>(i) * static_cast<size_t>(cols)) + static_cast<size_t>(j) + 2;
 
