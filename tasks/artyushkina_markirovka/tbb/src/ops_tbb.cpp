@@ -24,6 +24,7 @@ void AddNeighborIfValid(int neighbor_label, std::vector<int> &neighbor_labels) {
   }
 }
 
+// 8-связность: проверяем всех соседей сверху и слева (включая диагонали)
 void CollectNeighborsLabels(int i, int j, const std::vector<std::vector<int>> &temp_labels,
                             std::vector<int> &neighbor_labels, int cols) {
   // Верхний-левый (диагональ)
@@ -61,7 +62,8 @@ int FindMinLabel(const std::vector<int> &labels) {
   return min_label;
 }
 
-void ProcessPixel(int i, int j, const InType &input, int cols, std::vector<std::vector<int>> &temp_labels,
+void ProcessPixel(int i, int j, const InType &input, int cols,
+                  std::vector<std::vector<int>> &temp_labels,
                   std::vector<int> &parent, std::atomic<int> &next_label) {
   size_t idx = (static_cast<size_t>(i) * static_cast<size_t>(cols)) + static_cast<size_t>(j) + 2;
 
@@ -72,7 +74,7 @@ void ProcessPixel(int i, int j, const InType &input, int cols, std::vector<std::
   }
 
   std::vector<int> neighbor_labels;
-  neighbor_labels.reserve(4);
+  neighbor_labels.reserve(4);  // максимум 4 соседа (слева и сверху с диагоналями)
 
   CollectNeighborsLabels(i, j, temp_labels, neighbor_labels, cols);
 
