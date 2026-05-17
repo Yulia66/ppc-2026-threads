@@ -24,47 +24,26 @@ void AddNeighborIfValid(int neighbor_label, std::vector<int> &neighbor_labels) {
   }
 }
 
-// Функция сбора всех 8 соседей (8-связность)
 void CollectNeighborsLabels(int i, int j, const std::vector<std::vector<int>> &temp_labels,
-                            std::vector<int> &neighbor_labels, int rows, int cols) {
+                            std::vector<int> &neighbor_labels, int cols) {
   // Верхний-левый (диагональ)
   if (i > 0 && j > 0) {
-    int neighbor = temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j - 1)];
+    int neighbor = temp_labels[i - 1][j - 1];
     AddNeighborIfValid(neighbor, neighbor_labels);
   }
   // Верхний
   if (i > 0) {
-    int neighbor = temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j)];
+    int neighbor = temp_labels[i - 1][j];
     AddNeighborIfValid(neighbor, neighbor_labels);
   }
   // Верхний-правый (диагональ)
   if (i > 0 && j + 1 < cols) {
-    int neighbor = temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j + 1)];
+    int neighbor = temp_labels[i - 1][j + 1];
     AddNeighborIfValid(neighbor, neighbor_labels);
   }
   // Левый
   if (j > 0) {
-    int neighbor = temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j - 1)];
-    AddNeighborIfValid(neighbor, neighbor_labels);
-  }
-  // Правый
-  if (j + 1 < cols) {
-    int neighbor = temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j + 1)];
-    AddNeighborIfValid(neighbor, neighbor_labels);
-  }
-  // Нижний-левый (диагональ)
-  if (i + 1 < rows && j > 0) {
-    int neighbor = temp_labels[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j - 1)];
-    AddNeighborIfValid(neighbor, neighbor_labels);
-  }
-  // Нижний
-  if (i + 1 < rows) {
-    int neighbor = temp_labels[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j)];
-    AddNeighborIfValid(neighbor, neighbor_labels);
-  }
-  // Нижний-правый (диагональ)
-  if (i + 1 < rows && j + 1 < cols) {
-    int neighbor = temp_labels[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j + 1)];
+    int neighbor = temp_labels[i][j - 1];
     AddNeighborIfValid(neighbor, neighbor_labels);
   }
 }
@@ -74,41 +53,44 @@ int FindMinLabel(const std::vector<int> &labels) {
     return 0;
   }
   int min_label = labels[0];
-  for (std::size_t k = 1; k < labels.size(); ++k) {
-    min_label = std::min(min_label, labels[k]);
+  for (size_t k = 1; k < labels.size(); ++k) {
+    if (labels[k] < min_label) {
+      min_label = labels[k];
+    }
   }
   return min_label;
 }
 
-void ProcessPixel(int i, int j, const InType &input, int rows, int cols, std::vector<std::vector<int>> &temp_labels,
+void ProcessPixel(int i, int j, const InType &input, int cols,
+                  std::vector<std::vector<int>> &temp_labels,
                   std::vector<int> &parent, std::atomic<int> &next_label) {
-  std::size_t idx = (static_cast<std::size_t>(i) * static_cast<std::size_t>(cols)) + static_cast<std::size_t>(j) + 2;
+  size_t idx = (static_cast<size_t>(i) * static_cast<size_t>(cols)) + static_cast<size_t>(j) + 2;
 
-  // 0 = объект (белый), не-0 = фон (чёрный)
+  // 0 = объект, не-0 = фон
   if (input[idx] != 0) {
-    temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = 0;
+    temp_labels[i][j] = 0;
     return;
   }
 
   std::vector<int> neighbor_labels;
-  neighbor_labels.reserve(8);
+  neighbor_labels.reserve(4);
 
-  CollectNeighborsLabels(i, j, temp_labels, neighbor_labels, rows, cols);
+  CollectNeighborsLabels(i, j, temp_labels, neighbor_labels, cols);
 
   if (neighbor_labels.empty()) {
     int label = next_label.fetch_add(1);
-    temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = label;
+    temp_labels[i][j] = label;
 
     {
       tbb::mutex::scoped_lock lock(union_mutex);
-      if (static_cast<std::size_t>(label) >= parent.size()) {
-        parent.resize(static_cast<std::size_t>(label) + 1);
+      if (static_cast<size_t>(label) >= parent.size()) {
+        parent.resize(static_cast<size_t>(label) + 1);
       }
-      parent[static_cast<std::size_t>(label)] = label;
+      parent[static_cast<size_t>(label)] = label;
     }
   } else {
     int min_label = FindMinLabel(neighbor_labels);
-    temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = min_label;
+    temp_labels[i][j] = min_label;
 
     for (int label : neighbor_labels) {
       if (label != min_label) {
@@ -120,11 +102,11 @@ void ProcessPixel(int i, int j, const InType &input, int rows, int cols, std::ve
 
 std::vector<int> CollectUniqueLabels(const std::vector<std::vector<int>> &temp_labels, int rows, int cols) {
   std::vector<int> unique_labels;
-  unique_labels.reserve(static_cast<std::size_t>(rows) * static_cast<std::size_t>(cols));
+  unique_labels.reserve(static_cast<size_t>(rows) * static_cast<size_t>(cols));
 
   for (int i = 0; i < rows; ++i) {
     for (int j = 0; j < cols; ++j) {
-      int label = temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)];
+      int label = temp_labels[i][j];
       if (label != 0) {
         unique_labels.push_back(label);
       }
@@ -147,16 +129,16 @@ void ApplyLabelMapping(const std::map<int, int> &label_mapping, const std::vecto
                        std::vector<std::vector<int>> &labels, int rows, int cols) {
   tbb::parallel_for(0, rows, [&](int i) {
     for (int j = 0; j < cols; ++j) {
-      int label = temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)];
+      int label = temp_labels[i][j];
       if (label != 0) {
         auto it = label_mapping.find(label);
         if (it != label_mapping.end()) {
-          labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = it->second;
+          labels[i][j] = it->second;
         } else {
-          labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = 0;
+          labels[i][j] = 0;
         }
       } else {
-        labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = 0;
+        labels[i][j] = 0;
       }
     }
   });
@@ -181,15 +163,15 @@ bool MarkingComponentsTBB::PreProcessingImpl() {
   input_ = input;
 
   labels_.clear();
-  labels_.resize(static_cast<std::size_t>(rows_));
+  labels_.resize(static_cast<size_t>(rows_));
   for (int i = 0; i < rows_; ++i) {
-    labels_[static_cast<std::size_t>(i)].assign(static_cast<std::size_t>(cols_), 0);
+    labels_[static_cast<size_t>(i)].assign(static_cast<size_t>(cols_), 0);
   }
 
   temp_labels_.clear();
-  temp_labels_.resize(static_cast<std::size_t>(rows_));
+  temp_labels_.resize(static_cast<size_t>(rows_));
   for (int i = 0; i < rows_; ++i) {
-    temp_labels_[static_cast<std::size_t>(i)].assign(static_cast<std::size_t>(cols_), 0);
+    temp_labels_[static_cast<size_t>(i)].assign(static_cast<size_t>(cols_), 0);
   }
 
   parent_.clear();
@@ -201,10 +183,10 @@ bool MarkingComponentsTBB::PreProcessingImpl() {
 
 int MarkingComponentsTBB::FindRoot(std::vector<int> &parent, int label) {
   int current_label = label;
-  while (parent[static_cast<std::size_t>(current_label)] != current_label) {
-    parent[static_cast<std::size_t>(current_label)] =
-        parent[static_cast<std::size_t>(parent[static_cast<std::size_t>(current_label)])];
-    current_label = parent[static_cast<std::size_t>(current_label)];
+  while (parent[static_cast<size_t>(current_label)] != current_label) {
+    parent[static_cast<size_t>(current_label)] =
+        parent[static_cast<size_t>(parent[static_cast<size_t>(current_label)])];
+    current_label = parent[static_cast<size_t>(current_label)];
   }
   return current_label;
 }
@@ -220,9 +202,9 @@ void MarkingComponentsTBB::UnionLabels(std::vector<int> &parent, int label1, int
 
   if (root1 != root2) {
     if (root1 < root2) {
-      parent[static_cast<std::size_t>(root2)] = root1;
+      parent[static_cast<size_t>(root2)] = root1;
     } else {
-      parent[static_cast<std::size_t>(root1)] = root2;
+      parent[static_cast<size_t>(root1)] = root2;
     }
   }
 }
@@ -230,7 +212,7 @@ void MarkingComponentsTBB::UnionLabels(std::vector<int> &parent, int label1, int
 void MarkingComponentsTBB::ProcessFirstPass() {
   tbb::parallel_for(0, rows_, [&](int i) {
     for (int j = 0; j < cols_; ++j) {
-      ProcessPixel(i, j, input_, rows_, cols_, temp_labels_, parent_, next_label_);
+      ProcessPixel(i, j, input_, cols_, temp_labels_, parent_, next_label_);
     }
   });
 }
@@ -238,7 +220,7 @@ void MarkingComponentsTBB::ProcessFirstPass() {
 void MarkingComponentsTBB::ResolveEquivalences() {
   tbb::parallel_for(0, rows_, [&](int i) {
     for (int j = 0; j < cols_; ++j) {
-      int &label = temp_labels_[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)];
+      int &label = temp_labels_[static_cast<size_t>(i)][static_cast<size_t>(j)];
       if (label != 0) {
         label = FindRoot(parent_, label);
       }
@@ -280,7 +262,7 @@ bool MarkingComponentsTBB::PostProcessingImpl() {
 
   for (int i = 0; i < rows_; ++i) {
     for (int j = 0; j < cols_; ++j) {
-      output.push_back(static_cast<uint8_t>(labels_[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)]));
+      output.push_back(static_cast<uint8_t>(labels_[static_cast<size_t>(i)][static_cast<size_t>(j)]));
     }
   }
 
