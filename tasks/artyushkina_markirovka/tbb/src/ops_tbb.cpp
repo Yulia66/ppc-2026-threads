@@ -24,39 +24,48 @@ void AddNeighborIfValid(int neighbor_label, std::vector<int> &neighbor_labels) {
   }
 }
 
+// Функция сбора всех 8 соседей (8-связность)
 void CollectNeighborsLabels(int i, int j, const std::vector<std::vector<int>> &temp_labels,
                             std::vector<int> &neighbor_labels, int rows, int cols) {
-  // Check top-left (diagonal)
+  // Верхний-левый (диагональ)
   if (i > 0 && j > 0) {
-    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j - 1)], neighbor_labels);
+    int neighbor = temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j - 1)];
+    AddNeighborIfValid(neighbor, neighbor_labels);
   }
-  // Check top
+  // Верхний
   if (i > 0) {
-    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j)], neighbor_labels);
+    int neighbor = temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j)];
+    AddNeighborIfValid(neighbor, neighbor_labels);
   }
-  // Check top-right (diagonal)
+  // Верхний-правый (диагональ)
   if (i > 0 && j + 1 < cols) {
-    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j + 1)], neighbor_labels);
+    int neighbor = temp_labels[static_cast<std::size_t>(i - 1)][static_cast<std::size_t>(j + 1)];
+    AddNeighborIfValid(neighbor, neighbor_labels);
   }
-  // Check left
+  // Левый
   if (j > 0) {
-    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j - 1)], neighbor_labels);
+    int neighbor = temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j - 1)];
+    AddNeighborIfValid(neighbor, neighbor_labels);
   }
-  // Check right - IMPORTANT: For 8-connectivity, we need to check right neighbor too!
+  // Правый
   if (j + 1 < cols) {
-    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j + 1)], neighbor_labels);
+    int neighbor = temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j + 1)];
+    AddNeighborIfValid(neighbor, neighbor_labels);
   }
-  // Check bottom-left (diagonal) - IMPORTANT: For 8-connectivity, we need to check below rows!
+  // Нижний-левый (диагональ)
   if (i + 1 < rows && j > 0) {
-    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j - 1)], neighbor_labels);
+    int neighbor = temp_labels[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j - 1)];
+    AddNeighborIfValid(neighbor, neighbor_labels);
   }
-  // Check bottom (diagonal)
+  // Нижний
   if (i + 1 < rows) {
-    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j)], neighbor_labels);
+    int neighbor = temp_labels[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j)];
+    AddNeighborIfValid(neighbor, neighbor_labels);
   }
-  // Check bottom-right (diagonal)
+  // Нижний-правый (диагональ)
   if (i + 1 < rows && j + 1 < cols) {
-    AddNeighborIfValid(temp_labels[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j + 1)], neighbor_labels);
+    int neighbor = temp_labels[static_cast<std::size_t>(i + 1)][static_cast<std::size_t>(j + 1)];
+    AddNeighborIfValid(neighbor, neighbor_labels);
   }
 }
 
@@ -66,9 +75,7 @@ int FindMinLabel(const std::vector<int> &labels) {
   }
   int min_label = labels[0];
   for (std::size_t k = 1; k < labels.size(); ++k) {
-    if (labels[k] < min_label) {
-      min_label = labels[k];
-    }
+    min_label = std::min(min_label, labels[k]);
   }
   return min_label;
 }
@@ -77,8 +84,7 @@ void ProcessPixel(int i, int j, const InType &input, int rows, int cols, std::ve
                   std::vector<int> &parent, std::atomic<int> &next_label) {
   std::size_t idx = (static_cast<std::size_t>(i) * static_cast<std::size_t>(cols)) + static_cast<std::size_t>(j) + 2;
 
-  // Check if this is a background pixel (value 0 means object, non-zero means background)
-  // Based on your test data: 0 = object, 255 = background
+  // 0 = объект (белый), не-0 = фон (чёрный)
   if (input[idx] != 0) {
     temp_labels[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = 0;
     return;
