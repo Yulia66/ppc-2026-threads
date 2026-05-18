@@ -1,6 +1,8 @@
 #ifndef ARTYUSHKINA_MARKIROVKA_TBB_INCLUDE_OPS_TBB_HPP_
 #define ARTYUSHKINA_MARKIROVKA_TBB_INCLUDE_OPS_TBB_HPP_
 
+#include <tbb/spin_mutex.h>
+
 #include <atomic>
 #include <vector>
 
@@ -16,26 +18,29 @@ class MarkingComponentsTBB : public BaseTask {
   }
   explicit MarkingComponentsTBB(const InType &in);
 
-  static int FindRoot(std::vector<int> &parent, int label);
-  static void UnionLabels(std::vector<int> &parent, int label1, int label2);
-
  private:
   bool ValidationImpl() override;
   bool PreProcessingImpl() override;
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  void ProcessFirstPass();
-  void ResolveEquivalences();
-  void RemapLabels();
+  int FindRoot(int label);
+  void UnionLabels(int label1, int label2);
+
+  void InitLabelsTbb();
+  void MergeHorizontalPairsTbb();
+  void MergeVerticalPairsTbb();
+  void FinalizeRootsTbb();
+  void NormalizeLabelsTbb();
 
   int rows_ = 0;
   int cols_ = 0;
-  std::vector<std::vector<int>> labels_;
-  std::vector<std::vector<int>> temp_labels_;
+  std::vector<int> labels_;
   std::vector<int> parent_;
   InType input_;
-  std::atomic<int> next_label_{1};
+  int current_label_ = 0;
+
+  mutable tbb::spin_mutex dsu_mutex_;
 };
 
 }  // namespace artyushkina_markirovka

@@ -1,92 +1,15 @@
 #include "artyushkina_markirovka/tbb/include/ops_tbb.hpp"
 
-#include <tbb/blocked_range.h>
-#include <tbb/mutex.h>
 #include <tbb/parallel_for.h>
-#include <tbb/parallel_reduce.h>
-#include <tbb/parallel_sort.h>
 
 #include <algorithm>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <map>
 #include <vector>
 
 #include "artyushkina_markirovka/common/include/common.hpp"
 
 namespace artyushkina_markirovka {
-namespace {
-
-tbb::mutex union_mutex;
-
-// Проверка всех 8 соседей для 8-связности (но только уже обработанных)
-void CollectNeighborsLabels8Connectivity(int i, int j, const std::vector<std::vector<int>> &temp_labels,
-                                         std::vector<int> &neighbor_labels, int cols) {
-  // Верхний-левый (диагональ)
-  if (i > 0 && j > 0 && temp_labels[i - 1][j - 1] != 0) {
-    neighbor_labels.push_back(temp_labels[i - 1][j - 1]);
-  }
-  // Верхний
-  if (i > 0 && temp_labels[i - 1][j] != 0) {
-    neighbor_labels.push_back(temp_labels[i - 1][j]);
-  }
-  // Верхний-правый (диагональ)
-  if (i > 0 && j + 1 < cols && temp_labels[i - 1][j + 1] != 0) {
-    neighbor_labels.push_back(temp_labels[i - 1][j + 1]);
-  }
-  // Левый
-  if (j > 0 && temp_labels[i][j - 1] != 0) {
-    neighbor_labels.push_back(temp_labels[i][j - 1]);
-  }
-}
-
-void ProcessPixel(int i, int j, const InType &input, int cols, std::vector<std::vector<int>> &temp_labels,
-                  std::vector<int> &parent, std::atomic<int> &next_label) {
-  size_t idx = (static_cast<size_t>(i) * static_cast<size_t>(cols)) + static_cast<size_t>(j) + 2;
-
-  // Фон (255) - пропускаем
-  if (input[idx] != 0) {
-    temp_labels[i][j] = 0;
-    return;
-  }
-
-  std::vector<int> neighbor_labels;
-  neighbor_labels.reserve(4);
-
-  CollectNeighborsLabels8Connectivity(i, j, temp_labels, neighbor_labels, cols);
-
-  if (neighbor_labels.empty()) {
-    int label = next_label.fetch_add(1);
-    temp_labels[i][j] = label;
-
-    {
-      tbb::mutex::scoped_lock lock(union_mutex);
-      if (static_cast<size_t>(label) >= parent.size()) {
-        parent.resize(static_cast<size_t>(label) + 1);
-      }
-      parent[static_cast<size_t>(label)] = label;
-    }
-  } else {
-    // Находим минимальную метку
-    int min_label = neighbor_labels[0];
-    for (size_t k = 1; k < neighbor_labels.size(); ++k) {
-      if (neighbor_labels[k] < min_label) {
-        min_label = neighbor_labels[k];
-      }
-    }
-    temp_labels[i][j] = min_label;
-
-    // Объединяем все метки с минимальной
-    for (int label : neighbor_labels) {
-      if (label != min_label) {
-        MarkingComponentsTBB::UnionLabels(parent, min_label, label);
-      }
-    }
-  }
-}
-
-}  // namespace
 
 MarkingComponentsTBB::MarkingComponentsTBB(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
@@ -104,121 +27,116 @@ bool MarkingComponentsTBB::PreProcessingImpl() {
   cols_ = static_cast<int>(input[1]);
   input_ = input;
 
-  labels_.clear();
-  labels_.resize(static_cast<size_t>(rows_));
-  for (int i = 0; i < rows_; ++i) {
-    labels_[static_cast<size_t>(i)].assign(static_cast<size_t>(cols_), 0);
+  int total_pixels = rows_ * cols_;
+  labels_.assign(total_pixels, 0);
+  parent_.resize(total_pixels + 1);
+  for (int i = 0; i <= total_pixels; ++i) {
+    parent_[i] = i;
   }
 
-  temp_labels_.clear();
-  temp_labels_.resize(static_cast<size_t>(rows_));
-  for (int i = 0; i < rows_; ++i) {
-    temp_labels_[static_cast<size_t>(i)].assign(static_cast<size_t>(cols_), 0);
-  }
-
-  parent_.clear();
-  parent_.push_back(0);
-  next_label_ = 1;
-
+  current_label_ = 0;
   return true;
 }
 
-int MarkingComponentsTBB::FindRoot(std::vector<int> &parent, int label) {
-  int current_label = label;
-  while (parent[static_cast<size_t>(current_label)] != current_label) {
-    parent[static_cast<size_t>(current_label)] =
-        parent[static_cast<size_t>(parent[static_cast<size_t>(current_label)])];
-    current_label = parent[static_cast<size_t>(current_label)];
+int MarkingComponentsTBB::FindRoot(int label) {
+  int root = label;
+  while (parent_[root] != root) {
+    root = parent_[root];
   }
-  return current_label;
+  // Сжатие пути
+  int current = label;
+  while (parent_[current] != current) {
+    int next = parent_[current];
+    parent_[current] = root;
+    current = next;
+  }
+  return root;
 }
 
-void MarkingComponentsTBB::UnionLabels(std::vector<int> &parent, int label1, int label2) {
-  if (label1 == label2) {
-    return;
-  }
-
-  tbb::mutex::scoped_lock lock(union_mutex);
-  int root1 = FindRoot(parent, label1);
-  int root2 = FindRoot(parent, label2);
-
+void MarkingComponentsTBB::UnionLabels(int label1, int label2) {
+  tbb::spin_mutex::scoped_lock lock(dsu_mutex_);
+  int root1 = FindRoot(label1);
+  int root2 = FindRoot(label2);
   if (root1 != root2) {
     if (root1 < root2) {
-      parent[static_cast<size_t>(root2)] = root1;
+      parent_[root2] = root1;
     } else {
-      parent[static_cast<size_t>(root1)] = root2;
+      parent_[root1] = root2;
     }
   }
 }
 
-void MarkingComponentsTBB::ProcessFirstPass() {
-  tbb::parallel_for(0, rows_, [&](int i) {
-    for (int j = 0; j < cols_; ++j) {
-      ProcessPixel(i, j, input_, cols_, temp_labels_, parent_, next_label_);
+void MarkingComponentsTBB::InitLabelsTbb() {
+  int total_pixels = rows_ * cols_;
+  tbb::parallel_for(0, total_pixels, [this](int idx) {
+    size_t input_idx = static_cast<size_t>(idx) + 2;
+    // 0 = объект, не-0 = фон
+    if (input_[input_idx] == 0) {
+      labels_[idx] = idx + 1;  // Уникальный ID для каждого пикселя
     }
   });
 }
 
-void MarkingComponentsTBB::ResolveEquivalences() {
-  tbb::parallel_for(0, rows_, [&](int i) {
-    for (int j = 0; j < cols_; ++j) {
-      int &label = temp_labels_[static_cast<size_t>(i)][static_cast<size_t>(j)];
-      if (label != 0) {
-        label = FindRoot(parent_, label);
+void MarkingComponentsTBB::MergeHorizontalPairsTbb() {
+  tbb::parallel_for(0, rows_, [this](int y) {
+    for (int x = 0; x < cols_ - 1; ++x) {
+      int idx = y * cols_ + x;
+      if (labels_[idx] != 0 && labels_[idx + 1] != 0) {
+        UnionLabels(labels_[idx], labels_[idx + 1]);
       }
     }
   });
 }
 
-void MarkingComponentsTBB::RemapLabels() {
-  // Собираем уникальные метки
-  std::vector<int> unique_labels;
-  for (int i = 0; i < rows_; ++i) {
-    for (int j = 0; j < cols_; ++j) {
-      int label = temp_labels_[i][j];
-      if (label != 0) {
-        unique_labels.push_back(label);
-      }
-    }
-  }
-
-  if (unique_labels.empty()) {
-    return;
-  }
-
-  // Сортируем и удаляем дубликаты
-  tbb::parallel_sort(unique_labels.begin(), unique_labels.end());
-  auto last = std::unique(unique_labels.begin(), unique_labels.end());
-  unique_labels.erase(last, unique_labels.end());
-
-  // Создаём отображение
-  std::map<int, int> label_mapping;
-  int current_label = 1;
-  for (int label : unique_labels) {
-    label_mapping[label] = current_label++;
-  }
-
-  // Применяем отображение
-  tbb::parallel_for(0, rows_, [&](int i) {
-    for (int j = 0; j < cols_; ++j) {
-      int label = temp_labels_[i][j];
-      if (label != 0) {
-        labels_[i][j] = label_mapping[label];
-      } else {
-        labels_[i][j] = 0;
+void MarkingComponentsTBB::MergeVerticalPairsTbb() {
+  tbb::parallel_for(0, rows_ - 1, [this](int y) {
+    for (int x = 0; x < cols_; ++x) {
+      int idx = y * cols_ + x;
+      if (labels_[idx] != 0 && labels_[idx + cols_] != 0) {
+        UnionLabels(labels_[idx], labels_[idx + cols_]);
       }
     }
   });
+}
+
+void MarkingComponentsTBB::FinalizeRootsTbb() {
+  int total_pixels = rows_ * cols_;
+  tbb::parallel_for(0, total_pixels, [this](int i) {
+    if (labels_[i] != 0) {
+      labels_[i] = FindRoot(labels_[i]);
+    }
+  });
+}
+
+void MarkingComponentsTBB::NormalizeLabelsTbb() {
+  int total_pixels = rows_ * cols_;
+  std::vector<int> mapping(total_pixels + 1, 0);
+  int next_id = 1;
+
+  // Последовательная нормализация для гарантии порядка 1,2,3...
+  for (int i = 0; i < total_pixels; ++i) {
+    if (labels_[i] != 0) {
+      int root = labels_[i];
+      if (mapping[root] == 0) {
+        mapping[root] = next_id++;
+      }
+      labels_[i] = mapping[root];
+    }
+  }
+  current_label_ = next_id - 1;
 }
 
 bool MarkingComponentsTBB::RunImpl() {
-  if (input_.size() < 2 || rows_ == 0 || cols_ == 0) {
-    return false;
+  int total_pixels = rows_ * cols_;
+  if (total_pixels <= 0) {
+    return true;
   }
 
-  ProcessFirstPass();
-  ResolveEquivalences();
-  RemapLabels();
+  InitLabelsTbb();
+  MergeHorizontalPairsTbb();
+  MergeVerticalPairsTbb();
+  FinalizeRootsTbb();
+  NormalizeLabelsTbb();
 
   return true;
 }
@@ -230,10 +148,8 @@ bool MarkingComponentsTBB::PostProcessingImpl() {
   output.push_back(static_cast<uint8_t>(rows_));
   output.push_back(static_cast<uint8_t>(cols_));
 
-  for (int i = 0; i < rows_; ++i) {
-    for (int j = 0; j < cols_; ++j) {
-      output.push_back(static_cast<uint8_t>(labels_[i][j]));
-    }
+  for (int label : labels_) {
+    output.push_back(static_cast<uint8_t>(label));
   }
 
   return true;
