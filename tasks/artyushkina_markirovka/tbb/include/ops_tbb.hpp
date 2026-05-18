@@ -3,7 +3,6 @@
 
 #include <tbb/spin_mutex.h>
 
-#include <atomic>
 #include <vector>
 
 #include "artyushkina_markirovka/common/include/common.hpp"

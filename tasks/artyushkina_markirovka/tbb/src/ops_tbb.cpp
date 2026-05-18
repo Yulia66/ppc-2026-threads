@@ -1,8 +1,8 @@
 #include "artyushkina_markirovka/tbb/include/ops_tbb.hpp"
 
 #include <tbb/parallel_for.h>
+#include <tbb/spin_mutex.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -72,15 +72,15 @@ void MarkingComponentsTBB::InitLabelsTbb() {
     size_t input_idx = static_cast<size_t>(idx) + 2;
     // 0 = объект, не-0 = фон
     if (input_[input_idx] == 0) {
-      labels_[idx] = idx + 1;  // Уникальный ID для каждого пикселя
+      labels_[idx] = idx + 1;
     }
   });
 }
 
 void MarkingComponentsTBB::MergeHorizontalPairsTbb() {
-  tbb::parallel_for(0, rows_, [this](int y) {
-    for (int x = 0; x < cols_ - 1; ++x) {
-      int idx = y * cols_ + x;
+  tbb::parallel_for(0, rows_, [this](int y_coord) {
+    for (int x_coord = 0; x_coord < cols_ - 1; ++x_coord) {
+      int idx = (y_coord * cols_) + x_coord;
       if (labels_[idx] != 0 && labels_[idx + 1] != 0) {
         UnionLabels(labels_[idx], labels_[idx + 1]);
       }
@@ -89,9 +89,9 @@ void MarkingComponentsTBB::MergeHorizontalPairsTbb() {
 }
 
 void MarkingComponentsTBB::MergeVerticalPairsTbb() {
-  tbb::parallel_for(0, rows_ - 1, [this](int y) {
-    for (int x = 0; x < cols_; ++x) {
-      int idx = y * cols_ + x;
+  tbb::parallel_for(0, rows_ - 1, [this](int y_coord) {
+    for (int x_coord = 0; x_coord < cols_; ++x_coord) {
+      int idx = (y_coord * cols_) + x_coord;
       if (labels_[idx] != 0 && labels_[idx + cols_] != 0) {
         UnionLabels(labels_[idx], labels_[idx + cols_]);
       }
@@ -113,7 +113,6 @@ void MarkingComponentsTBB::NormalizeLabelsTbb() {
   std::vector<int> mapping(total_pixels + 1, 0);
   int next_id = 1;
 
-  // Последовательная нормализация для гарантии порядка 1,2,3...
   for (int i = 0; i < total_pixels; ++i) {
     if (labels_[i] != 0) {
       int root = labels_[i];
