@@ -24,9 +24,10 @@ void AddNeighborIfValid(int neighbor_label, std::vector<int> &neighbor_labels) {
   }
 }
 
-// 8-связность: проверяем ВСЕ 8 направлений
+// 8-связность: проверяем 4 соседей сверху и слева (включая диагонали)
+// Для двухпроходного алгоритма этого достаточно
 void CollectNeighborsLabels(int i, int j, const std::vector<std::vector<int>> &temp_labels,
-                            std::vector<int> &neighbor_labels, int rows, int cols) {
+                            std::vector<int> &neighbor_labels, int cols) {
   // Верхний-левый (диагональ)
   if (i > 0 && j > 0) {
     AddNeighborIfValid(temp_labels[i - 1][j - 1], neighbor_labels);
@@ -43,22 +44,6 @@ void CollectNeighborsLabels(int i, int j, const std::vector<std::vector<int>> &t
   if (j > 0) {
     AddNeighborIfValid(temp_labels[i][j - 1], neighbor_labels);
   }
-  // Правый - ВАЖНО для 8-связности!
-  if (j + 1 < cols) {
-    AddNeighborIfValid(temp_labels[i][j + 1], neighbor_labels);
-  }
-  // Нижний-левый (диагональ)
-  if (i + 1 < rows && j > 0) {
-    AddNeighborIfValid(temp_labels[i + 1][j - 1], neighbor_labels);
-  }
-  // Нижний
-  if (i + 1 < rows) {
-    AddNeighborIfValid(temp_labels[i + 1][j], neighbor_labels);
-  }
-  // Нижний-правый (диагональ)
-  if (i + 1 < rows && j + 1 < cols) {
-    AddNeighborIfValid(temp_labels[i + 1][j + 1], neighbor_labels);
-  }
 }
 
 int FindMinLabel(const std::vector<int> &labels) {
@@ -74,7 +59,7 @@ int FindMinLabel(const std::vector<int> &labels) {
   return min_label;
 }
 
-void ProcessPixel(int i, int j, const InType &input, int rows, int cols, std::vector<std::vector<int>> &temp_labels,
+void ProcessPixel(int i, int j, const InType &input, int cols, std::vector<std::vector<int>> &temp_labels,
                   std::vector<int> &parent, std::atomic<int> &next_label) {
   size_t idx = (static_cast<size_t>(i) * static_cast<size_t>(cols)) + static_cast<size_t>(j) + 2;
 
@@ -85,9 +70,9 @@ void ProcessPixel(int i, int j, const InType &input, int rows, int cols, std::ve
   }
 
   std::vector<int> neighbor_labels;
-  neighbor_labels.reserve(8);
+  neighbor_labels.reserve(4);
 
-  CollectNeighborsLabels(i, j, temp_labels, neighbor_labels, rows, cols);
+  CollectNeighborsLabels(i, j, temp_labels, neighbor_labels, cols);
 
   if (neighbor_labels.empty()) {
     int label = next_label.fetch_add(1);
@@ -220,7 +205,7 @@ void MarkingComponentsTBB::UnionLabels(std::vector<int> &parent, int label1, int
 void MarkingComponentsTBB::ProcessFirstPass() {
   tbb::parallel_for(0, rows_, [&](int i) {
     for (int j = 0; j < cols_; ++j) {
-      ProcessPixel(i, j, input_, rows_, cols_, temp_labels_, parent_, next_label_);
+      ProcessPixel(i, j, input_, cols_, temp_labels_, parent_, next_label_);
     }
   });
 }
