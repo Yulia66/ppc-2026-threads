@@ -29,23 +29,19 @@ void CollectNeighborsLabels(int i, int j, const std::vector<std::vector<int>> &t
                             std::vector<int> &neighbor_labels, int cols) {
   // Верхний-левый (диагональ)
   if (i > 0 && j > 0) {
-    int neighbor = temp_labels[i - 1][j - 1];
-    AddNeighborIfValid(neighbor, neighbor_labels);
+    AddNeighborIfValid(temp_labels[i - 1][j - 1], neighbor_labels);
   }
   // Верхний
   if (i > 0) {
-    int neighbor = temp_labels[i - 1][j];
-    AddNeighborIfValid(neighbor, neighbor_labels);
+    AddNeighborIfValid(temp_labels[i - 1][j], neighbor_labels);
   }
   // Верхний-правый (диагональ)
   if (i > 0 && j + 1 < cols) {
-    int neighbor = temp_labels[i - 1][j + 1];
-    AddNeighborIfValid(neighbor, neighbor_labels);
+    AddNeighborIfValid(temp_labels[i - 1][j + 1], neighbor_labels);
   }
   // Левый
   if (j > 0) {
-    int neighbor = temp_labels[i][j - 1];
-    AddNeighborIfValid(neighbor, neighbor_labels);
+    AddNeighborIfValid(temp_labels[i][j - 1], neighbor_labels);
   }
 }
 
@@ -55,7 +51,9 @@ int FindMinLabel(const std::vector<int> &labels) {
   }
   int min_label = labels[0];
   for (size_t k = 1; k < labels.size(); ++k) {
-    min_label = std::min(min_label, labels[k]);
+    if (labels[k] < min_label) {
+      min_label = labels[k];
+    }
   }
   return min_label;
 }
@@ -118,9 +116,9 @@ void SortAndRemoveDuplicates(std::vector<int> &unique_labels) {
     return;
   }
 
-  std::ranges::sort(unique_labels);
-  auto last = std::ranges::unique(unique_labels);
-  unique_labels.erase(last.begin(), last.end());
+  std::sort(unique_labels.begin(), unique_labels.end());
+  auto last = std::unique(unique_labels.begin(), unique_labels.end());
+  unique_labels.erase(last, unique_labels.end());
 }
 
 void ApplyLabelMapping(const std::map<int, int> &label_mapping, const std::vector<std::vector<int>> &temp_labels,
@@ -130,11 +128,7 @@ void ApplyLabelMapping(const std::map<int, int> &label_mapping, const std::vecto
       int label = temp_labels[i][j];
       if (label != 0) {
         auto it = label_mapping.find(label);
-        if (it != label_mapping.end()) {
-          labels[i][j] = it->second;
-        } else {
-          labels[i][j] = 0;
-        }
+        labels[i][j] = (it != label_mapping.end()) ? it->second : 0;
       } else {
         labels[i][j] = 0;
       }
