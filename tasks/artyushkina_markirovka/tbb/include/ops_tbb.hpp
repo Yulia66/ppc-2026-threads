@@ -16,26 +16,16 @@ class MarkingComponentsTBB : public BaseTask {
   }
   explicit MarkingComponentsTBB(const InType &in);
 
-  static int FindRoot(std::vector<int> &parent, int label);
-  static void UnionLabels(std::vector<int> &parent, int label1, int label2);
-
  private:
   bool ValidationImpl() override;
   bool PreProcessingImpl() override;
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  void ProcessFirstPass();
-  void ResolveEquivalences();
-  void RemapLabels();
-
   int rows_ = 0;
   int cols_ = 0;
   std::vector<std::vector<int>> labels_;
-  std::vector<std::vector<int>> temp_labels_;
-  std::vector<int> parent_;
   InType input_;
-  std::atomic<int> next_label_{1};
 };
 
 }  // namespace artyushkina_markirovka
