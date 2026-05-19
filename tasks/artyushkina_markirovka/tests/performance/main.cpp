@@ -15,16 +15,16 @@ namespace {
 class ArtyushkinaMarkirovkaPerfTestsBase : public ppc::util::BaseRunPerfTests<InType, OutType> {
  protected:
   void SetUp() override {
-    const int k_size = 1000;
-    input_data_.resize((static_cast<std::size_t>(k_size) * static_cast<std::size_t>(k_size)) + 2);
+    constexpr int kSize = 1000;
+    input_data_.resize((static_cast<std::size_t>(kSize) * static_cast<std::size_t>(kSize)) + 2);
 
-    input_data_[0] = static_cast<uint8_t>(k_size);
-    input_data_[1] = static_cast<uint8_t>(k_size);
+    input_data_[0] = static_cast<uint8_t>(kSize);
+    input_data_[1] = static_cast<uint8_t>(kSize);
 
-    for (int i = 0; i < k_size; ++i) {
-      for (int j = 0; j < k_size; ++j) {
+    for (int i = 0; i < kSize; ++i) {
+      for (int j = 0; j < kSize; ++j) {
         std::size_t idx =
-            (static_cast<std::size_t>(i) * static_cast<std::size_t>(k_size)) + static_cast<std::size_t>(j) + 2;
+            (static_cast<std::size_t>(i) * static_cast<std::size_t>(kSize)) + static_cast<std::size_t>(j) + 2;
         input_data_[idx] = static_cast<uint8_t>(((i + j) % 2 == 0) ? 0 : 255);
       }
     }
@@ -34,7 +34,8 @@ class ArtyushkinaMarkirovkaPerfTestsBase : public ppc::util::BaseRunPerfTests<In
     int rows = static_cast<int>(output_data[0]);
     int cols = static_cast<int>(output_data[1]);
 
-    if (static_cast<int>(input_data_[0]) != rows || static_cast<int>(input_data_[1]) != cols) {
+    if (std::cmp_not_equal(static_cast<int>(input_data_[0]), rows) ||
+        std::cmp_not_equal(static_cast<int>(input_data_[1]), cols)) {
       return false;
     }
 
