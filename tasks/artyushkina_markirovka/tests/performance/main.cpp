@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
+#include <utility>
 
 #include "artyushkina_markirovka/common/include/common.hpp"
 #include "artyushkina_markirovka/seq/include/ops_seq.hpp"
@@ -37,8 +39,7 @@ class ArtyushkinaMarkirovkaPerfTestsBase : public ppc::util::BaseRunPerfTests<In
     int rows = static_cast<int>(output_data[0]);
     int cols = static_cast<int>(output_data[1]);
 
-    if (std::cmp_not_equal(static_cast<int>(input_data_[0]), rows) ||
-        std::cmp_not_equal(static_cast<int>(input_data_[1]), cols)) {
+    if (static_cast<int>(input_data_[0]) != rows || static_cast<int>(input_data_[1]) != cols) {
       return false;
     }
 
@@ -53,12 +54,9 @@ class ArtyushkinaMarkirovkaPerfTestsBase : public ppc::util::BaseRunPerfTests<In
         uint8_t output_val = output_data[output_idx];
 
         if (input_val == 0 && output_val == 0) {
-          std::cout << "Error: Object at (" << i << "," << j << ") has label 0\n";
           return false;
         }
         if (input_val != 0 && output_val != 0) {
-          std::cout << "Error: Background at (" << i << "," << j << ") has label " << static_cast<int>(output_val)
-                    << "\n";
           return false;
         }
       }
