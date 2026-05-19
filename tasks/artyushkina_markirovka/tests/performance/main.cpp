@@ -25,7 +25,7 @@ class ArtyushkinaMarkirovkaPerfTestsBase : public ppc::util::BaseRunPerfTests<In
       for (int j = 0; j < k_size; ++j) {
         std::size_t idx =
             (static_cast<std::size_t>(i) * static_cast<std::size_t>(k_size)) + static_cast<std::size_t>(j) + 2;
-        input_data_[idx] = static_cast<uint8_t>(((i + j) % 2 == 0) ? 0 : 1);
+        input_data_[idx] = static_cast<uint8_t>(((i + j) % 2 == 0) ? 0 : 255);
       }
     }
   }
@@ -34,7 +34,7 @@ class ArtyushkinaMarkirovkaPerfTestsBase : public ppc::util::BaseRunPerfTests<In
     int rows = static_cast<int>(output_data[0]);
     int cols = static_cast<int>(output_data[1]);
 
-    if (std::cmp_not_equal(rows, input_data_[0]) || std::cmp_not_equal(cols, input_data_[1])) {
+    if (static_cast<int>(input_data_[0]) != rows || static_cast<int>(input_data_[1]) != cols) {
       return false;
     }
 
@@ -64,7 +64,6 @@ class ArtyushkinaMarkirovkaPerfTestsBase : public ppc::util::BaseRunPerfTests<In
   InType input_data_;
 };
 
-// SEQ перформанс тесты
 class ArtyushkinaMarkirovkaSEQPerfTests : public ArtyushkinaMarkirovkaPerfTestsBase {};
 
 TEST_P(ArtyushkinaMarkirovkaSEQPerfTests, RunPerfModes) {
@@ -80,7 +79,6 @@ const auto kPerfTestNameSeq = ArtyushkinaMarkirovkaSEQPerfTests::CustomPerfTestN
 
 INSTANTIATE_TEST_SUITE_P(SEQRunModeTests, ArtyushkinaMarkirovkaSEQPerfTests, kGtestValuesSeq, kPerfTestNameSeq);
 
-// TBB перформанс тесты
 class ArtyushkinaMarkirovkaTBBPerfTests : public ArtyushkinaMarkirovkaPerfTestsBase {};
 
 TEST_P(ArtyushkinaMarkirovkaTBBPerfTests, RunPerfModes) {
