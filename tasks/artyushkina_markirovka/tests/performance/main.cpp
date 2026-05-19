@@ -2,7 +2,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <utility>
 
 #include "artyushkina_markirovka/common/include/common.hpp"
 #include "artyushkina_markirovka/seq/include/ops_seq.hpp"
@@ -15,17 +14,21 @@ namespace {
 class ArtyushkinaMarkirovkaPerfTestsBase : public ppc::util::BaseRunPerfTests<InType, OutType> {
  protected:
   void SetUp() override {
-    constexpr int kSize = 1000;
-    input_data_.resize((static_cast<std::size_t>(kSize) * static_cast<std::size_t>(kSize)) + 2);
+    const int k_size = 1000;
+    input_data_.resize((static_cast<std::size_t>(k_size) * static_cast<std::size_t>(k_size)) + 2);
 
-    input_data_[0] = static_cast<uint8_t>(kSize);
-    input_data_[1] = static_cast<uint8_t>(kSize);
+    input_data_[0] = static_cast<uint8_t>(k_size);
+    input_data_[1] = static_cast<uint8_t>(k_size);
 
-    for (int i = 0; i < kSize; ++i) {
-      for (int j = 0; j < kSize; ++j) {
+    for (int i = 0; i < k_size; ++i) {
+      for (int j = 0; j < k_size; ++j) {
         std::size_t idx =
-            (static_cast<std::size_t>(i) * static_cast<std::size_t>(kSize)) + static_cast<std::size_t>(j) + 2;
-        input_data_[idx] = static_cast<uint8_t>(((i + j) % 2 == 0) ? 0 : 255);
+            (static_cast<std::size_t>(i) * static_cast<std::size_t>(k_size)) + static_cast<std::size_t>(j) + 2;
+        if (j % 20 < 10) {
+          input_data_[idx] = 0;
+        } else {
+          input_data_[idx] = 255;
+        }
       }
     }
   }
@@ -46,10 +49,16 @@ class ArtyushkinaMarkirovkaPerfTestsBase : public ppc::util::BaseRunPerfTests<In
         std::size_t input_idx =
             (static_cast<std::size_t>(i) * static_cast<std::size_t>(cols)) + static_cast<std::size_t>(j) + 2;
 
-        if (input_data_[input_idx] == 0 && output_data[output_idx] == 0) {
+        uint8_t input_val = input_data_[input_idx];
+        uint8_t output_val = output_data[output_idx];
+
+        if (input_val == 0 && output_val == 0) {
+          std::cout << "Error: Object at (" << i << "," << j << ") has label 0\n";
           return false;
         }
-        if (input_data_[input_idx] != 0 && output_data[output_idx] != 0) {
+        if (input_val != 0 && output_val != 0) {
+          std::cout << "Error: Background at (" << i << "," << j << ") has label " << static_cast<int>(output_val)
+                    << "\n";
           return false;
         }
       }
