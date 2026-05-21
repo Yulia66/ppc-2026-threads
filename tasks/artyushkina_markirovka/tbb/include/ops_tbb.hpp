@@ -29,6 +29,7 @@ class MarkingComponentsTBB : public BaseTask {
   void InitLabelsTbb();
   void MergeHorizontalPairsTbb();
   void MergeVerticalPairsTbb();
+  void MergeDiagonalPairsTbb();
   void FinalizeRootsTbb();
   void NormalizeLabelsTbb();
 
@@ -44,4 +45,4 @@ class MarkingComponentsTBB : public BaseTask {
 
 }  // namespace artyushkina_markirovka
 
-#endif  // ARTYUSHKINA_MARKIROVKA_TBB_INCLUDE_OPS_TBB_HPP_
+#endif
