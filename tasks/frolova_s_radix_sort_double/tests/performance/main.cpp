@@ -4,9 +4,11 @@
 #include <cstddef>
 #include <tuple>
 
+#include "frolova_s_radix_sort_double/all/include/ops_all.hpp"
 #include "frolova_s_radix_sort_double/common/include/common.hpp"
 #include "frolova_s_radix_sort_double/omp/include/ops_omp.hpp"
 #include "frolova_s_radix_sort_double/seq/include/ops_seq.hpp"
+#include "frolova_s_radix_sort_double/stl/include/ops_stl.hpp"
 #include "frolova_s_radix_sort_double/tbb/include/ops_tbb.hpp"
 #include "util/include/perf_test_util.hpp"
 
@@ -49,7 +51,9 @@ namespace {
 const auto kAllPerfTasks =
     std::tuple_cat(ppc::util::MakeAllPerfTasks<InType, FrolovaSRadixSortDoubleSEQ>(PPC_SETTINGS_example_threads),
                    ppc::util::MakeAllPerfTasks<InType, FrolovaSRadixSortDoubleOMP>(PPC_SETTINGS_example_threads),
-                   ppc::util::MakeAllPerfTasks<InType, FrolovaSRadixSortDoubleTBB>(PPC_SETTINGS_example_threads));
+                   ppc::util::MakeAllPerfTasks<InType, FrolovaSRadixSortDoubleTBB>(PPC_SETTINGS_example_threads),
+                   ppc::util::MakeAllPerfTasks<InType, FrolovaSRadixSortDoubleSTL>(PPC_SETTINGS_example_threads),
+                   ppc::util::MakeAllPerfTasks<InType, FrolovaSRadixSortDoubleALL>(PPC_SETTINGS_example_threads));
 
 const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
 const auto kPerfTestName = FrolovaSRadixSortDoubleRunPerfTests::CustomPerfTestName;
